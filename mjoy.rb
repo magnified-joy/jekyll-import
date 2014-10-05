@@ -149,11 +149,13 @@ module JekyllImport
              users.user_login    AS `author_login`,
              users.user_email    AS `author_email`,
              users.user_url      AS `author_url`,
-             pm2.meta_value     AS `thumbnail`
+             pm2.meta_value     AS `thumbnail`,
+			 pmd.meta_value AS `description`,
+			 pmk.meta_value AS `keywords`
            FROM #{px}posts AS `posts`
              LEFT JOIN #{px}users AS `users`
-               ON posts.post_author = users.ID, wp_postmeta as pm, wp_postmeta pm2 
-WHERE pm.post_id = posts.id AND pm.meta_key = '_thumbnail_id' AND pm2.post_ID = pm.meta_value AND pm2.meta_key = '_wp_attached_file'"
+               ON posts.post_author = users.ID, wp_postmeta as pm, wp_postmeta pm2, wp_postmeta pmd, wp_postmeta pmk 
+WHERE pm.post_id = posts.id AND pm.meta_key = '_thumbnail_id' AND pm2.post_ID = pm.meta_value AND pm2.meta_key = '_wp_attached_file' AND pmd.post_id = posts.id AND pmk.post_id = posts.id AND pmd.meta_key = '_aioseop_description' AND pmk.meta_key = '_aioseop_keywords'"
 			
 
         if options[:status] and not options[:status].empty?
@@ -290,14 +292,35 @@ WHERE pm.post_id = posts.id AND pm.meta_key = '_thumbnail_id' AND pm2.post_ID = 
 
           comments.sort!{ |a,b| a['id'] <=> b['id'] }
         end
+		
+		t = title.to_s
+		if t.include? '+'
+			prev = ''
+			found = false
+			title.to_s.split(' ').each{ |x|
+				if found 
+					t = prev+" + "+x
+					break
+				end
+				if x.include? '+'
+					found = true
+				else
+					prev = x
+				end
+			}
+			t = t.split("'")[0].split("’")[0]
+		else
+			t = ''
+		end
 
         # Get the relevant fields as a hash, delete empty fields and
         # convert to YAML for the header.
         data = {
-          'layout'        => 'post', #post[:type].to_s,
+          #'layout'        => 'post', #post[:type].to_s,
           #'status'        => post[:status].to_s,
           #'published'     => post[:status].to_s == 'draft' ? nil : (post[:status].to_s == 'publish'),
           'title'         => title.to_s,
+		  'label'		  => t,
           #'author'        => {
           #  'display_name'=> post[:author].to_s,
           #  'login'       => post[:author_login].to_s,
@@ -313,6 +336,8 @@ WHERE pm.post_id = posts.id AND pm.meta_key = '_thumbnail_id' AND pm2.post_ID = 
           #'wordpress_url' => post[:guid].to_s,
           'date'          => date.to_s,
 		  'thumbnail'	=> "http://weddings.magnifiedjoy.com/wp-content/uploads/"+post[:thumbnail].to_s.sub(".jpg", "-480x375.jpg"),
+		  'description' => post[:description].to_s.gsub('\n', ''),
+		  'keywords' => post[:keywords].to_s.gsub('\n', '')
           #'date_gmt'      => post[:date_gmt].to_s,
           #'categories'    => options[:categories] ? categories : nil,
           #'tags'          => options[:tags] ? tags : nil,
@@ -320,7 +345,7 @@ WHERE pm.post_id = posts.id AND pm.meta_key = '_thumbnail_id' AND pm2.post_ID = 
         }.delete_if { |k,v| v.nil? || v == '' }.to_yaml
 
         if post[:type] == 'page'
-          filename = page_path(post[:id], page_name_list) + 'index.markdown'
+         # filename = page_path(post[:id], page_name_list) + 'index.markdown'
          # FileUtils.mkdir_p(File.dirname(filename))
         elsif post[:status] == 'draft'
           filename = "_drafts/#{slug}.md"
@@ -333,20 +358,21 @@ WHERE pm.post_id = posts.id AND pm.meta_key = '_thumbnail_id' AND pm2.post_ID = 
 		elsif (categories[0] and categories[0].downcase.include? "video") or post[:type].to_s.downcase == 'video'
 			filename = "video/_posts/#{name}"
 		elsif (categories[0] and categories[0].downcase.include? "life") or post[:type].to_s.downcase == 'life'
-			filename = "life/_posts/#{name}"
+			filename = "personal/_posts/#{name}"
 		elsif (categories[0] and categories[0].downcase.include? "portrait") or post[:type].to_s.downcase == 'portrait'
 			filename = "portrait/_posts/#{name}"
         else
           filename = "_posts/#{name}"
         end
-		
-          FileUtils.mkdir_p(File.dirname(filename))
+		if filename 
+			FileUtils.mkdir_p(File.dirname(filename))
 
-        # Write out the data and content to file
-        File.open(filename, "w") do |f|
-          f.puts data
-          f.puts "---"
-          f.puts Util.wpautop(content)
+			# Write out the data and content to file
+			File.open(filename, "w") do |f|
+			  f.puts data
+			  f.puts "---"
+			  f.puts Util.wpautop(content)
+			end
         end
       end
 
